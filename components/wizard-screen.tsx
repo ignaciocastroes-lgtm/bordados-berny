@@ -23,47 +23,25 @@ import {
   X,
   ArrowLeft,
   Check,
-  Shirt,
-  Scissors,
-  PenTool,
+  LogOut,
   AlertTriangle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppStore, type GarmentType } from "@/store/useAppStore"
 // EmbroideryWizard remains its own component; it writes to the store internally
 import { EmbroideryWizard } from "@/components/embroidery-wizard"
+import { LogoMark } from "@/components/logo-bordados-berny"
+import {
+  PantsIcon,
+  ShortsIcon,
+  BlouseIcon,
+  TShirtIcon,
+  HoodieIcon,
+  OtherIcon,
+  EmbroideryHoopIcon,
+} from "@/components/garment-icons"
 
-// ─── Garment options (icon components kept verbatim) ──────────────────────────
-
-function PantsIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h16v2l-2 14h-4l-2-10-2 10H6L4 6V4z" />
-    </svg>
-  )
-}
-function ShortsIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h16v2l-2 8h-4l-2-4-2 4H6L4 6V4z" />
-    </svg>
-  )
-}
-function TShirtIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47a1 1 0 00.99.84H6v10a1 1 0 001 1h10a1 1 0 001-1V10h2.15a1 1 0 00.99-.84l.58-3.47a2 2 0 00-1.34-2.23z" />
-    </svg>
-  )
-}
-function HoodieIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.38 3.46L16 2a4 4 0 01-8 0L3.62 3.46a2 2 0 00-1.34 2.23l.58 3.47a1 1 0 00.99.84H6v10a1 1 0 001 1h10a1 1 0 001-1V10h2.15a1 1 0 00.99-.84l.58-3.47a2 2 0 00-1.34-2.23z" />
-      <path d="M12 2v6" /><path d="M9 8h6" />
-    </svg>
-  )
-}
+// ─── Garment options (artistic "bordado"-styled icons — see garment-icons.tsx) ─
 
 interface GarmentOption {
   id: GarmentType
@@ -72,13 +50,13 @@ interface GarmentOption {
 }
 
 const GARMENT_OPTIONS: GarmentOption[] = [
-  { id: "pantalon", label: "Pantalón",      icon: <PantsIcon className="w-8 h-8" /> },
-  { id: "short",    label: "Short",          icon: <ShortsIcon className="w-8 h-8" /> },
-  { id: "blusa",    label: "Blusa",          icon: <Shirt className="w-8 h-8" /> },
-  { id: "polera",   label: "Polera",         icon: <TShirtIcon className="w-8 h-8" /> },
-  { id: "poleron",  label: "Polerón",        icon: <HoodieIcon className="w-8 h-8" /> },
-  { id: "otro",     label: "Otro",           icon: <Scissors className="w-8 h-8" /> },
-  { id: "bordado",  label: "Bordado/Matriz", icon: <PenTool className="w-8 h-8" /> },
+  { id: "pantalon", label: "Pantalón",      icon: <PantsIcon className="w-9 h-9" /> },
+  { id: "short",    label: "Short",          icon: <ShortsIcon className="w-9 h-9" /> },
+  { id: "blusa",    label: "Blusa",          icon: <BlouseIcon className="w-9 h-9" /> },
+  { id: "polera",   label: "Polera",         icon: <TShirtIcon className="w-9 h-9" /> },
+  { id: "poleron",  label: "Polerón",        icon: <HoodieIcon className="w-9 h-9" /> },
+  { id: "otro",     label: "Otro",           icon: <OtherIcon className="w-9 h-9" /> },
+  { id: "bordado",  label: "Bordado/Matriz", icon: <EmbroideryHoopIcon className="w-9 h-9" /> },
 ]
 
 // ─── Photo Dropzone (UI only, no store contact) ───────────────────────────────
@@ -158,6 +136,15 @@ export function WizardScreen() {
   const setPhoto        = useAppStore((s) => s.setPhoto)
   const setDescription  = useAppStore((s) => s.setDescription)
   const resetOrder      = useAppStore((s) => s.resetOrder)
+  const logoutStore     = useAppStore((s) => s.logout)
+
+  // ── Logout: closes the real Supabase session (not just the local Zustand
+  // flag) and sends the customer back to the login screen. ────────────────────
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut()
+    logoutStore()
+    router.replace("/")
+  }, [supabase, logoutStore, router])
 
   // ── Route guard ──────────────────────────────────────────────────────────────
   // BUG FIX: this used to check the Zustand `userRole` flag, which is never
@@ -284,13 +271,15 @@ export function WizardScreen() {
 
       {/* Stitch-styled top bar */}
       <div className="stitch-container sticky top-0 z-10 flex items-center gap-3 px-4 py-3 shadow-sm">
-        {step !== "garment" && (
+        {step !== "garment" ? (
           <button
             onClick={() => setStep(step === "photos" ? "garment" : step === "description" ? "photos" : "description")}
             className="p-1 text-stone-500 hover:text-stone-700 transition-colors"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
+        ) : (
+          <LogoMark className="size-8 shrink-0" />
         )}
         <div>
           <p className="text-xs text-stone-500 uppercase tracking-wide font-medium">Nueva Solicitud</p>
@@ -314,6 +303,13 @@ export function WizardScreen() {
             />
           ))}
         </div>
+        <button
+          onClick={handleLogout}
+          title="Cerrar sesión"
+          className="p-1.5 text-stone-400 hover:text-red-600 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
 
       <div className="max-w-lg mx-auto px-4 py-6 space-y-4">

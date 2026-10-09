@@ -22,8 +22,10 @@ import {
   MessageCircle,
   ArrowLeft,
   Download,
+  LogOut,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { LogoMark } from "@/components/logo-bordados-berny"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,6 +122,13 @@ export function TrackerScreen() {
     fetchMyOrders()
   }, []) // eslint-disable-line
 
+  // ── Logout: closes the real Supabase session and sends the customer back
+  // to the login screen. ───────────────────────────────────────────────────────
+  const handleLogout = useCallback(async () => {
+    await supabase.auth.signOut()
+    router.replace("/")
+  }, [supabase, router])
+
   // ── Loading state (auth check) ────────────────────────────────────────────
   if (checkingAuth && loading) {
     return (
@@ -140,6 +149,7 @@ export function TrackerScreen() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
+        <LogoMark className="size-8 shrink-0" />
         <div>
           <p className="text-xs text-stone-500 uppercase tracking-wide font-medium">Mis Pedidos</p>
           <h1 className="text-sm font-bold text-stone-800">Historial de Solicitudes</h1>
@@ -151,6 +161,13 @@ export function TrackerScreen() {
         >
           <RefreshCw className={cn("size-3.5", loading && "animate-spin")} />
           Actualizar
+        </button>
+        <button
+          onClick={handleLogout}
+          title="Cerrar sesión"
+          className="p-1.5 text-stone-400 hover:text-red-600 transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
         </button>
       </div>
 
