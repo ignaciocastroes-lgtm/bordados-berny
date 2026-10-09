@@ -17,7 +17,13 @@
  *
  * Zustand userRole is NOT touched here anymore — the middleware is the
  * single source of truth for routing; Zustand is only used for order state.
+ *
+ * force-dynamic: same build-time fix as admin/dashboard and admin/kanban —
+ * this calls Supabase's createClient() during render, which Next would
+ * otherwise try to run once at build time to prerender the page.
  */
+
+export const dynamic = "force-dynamic"
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"

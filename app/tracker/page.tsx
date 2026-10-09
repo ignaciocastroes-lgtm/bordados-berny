@@ -15,7 +15,13 @@
  *  - Orders are fetched with an explicit .eq("customer_id", user.id) filter
  *    (RLS also enforces this server-side, but the explicit filter is what
  *    was asked for and makes the query's intent clear)
+ *
+ * force-dynamic: same build-time fix as app/page.tsx (login) — this calls
+ * Supabase's createClient() during render, which Next would otherwise try
+ * to run once at build time to prerender the page.
  */
+
+export const dynamic = "force-dynamic"
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"

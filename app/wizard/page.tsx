@@ -12,7 +12,13 @@
  *    survive navigation (wizard step, isDragging, etc.).
  *  - Route guard: unauthenticated visitors are redirected to /.
  *  - On completion, order is committed to the store and user is pushed to /tracker.
+ *
+ * force-dynamic: same build-time fix as app/page.tsx (login) — this calls
+ * Supabase's createClient() during render, which Next would otherwise try
+ * to run once at build time to prerender the page.
  */
+
+export const dynamic = "force-dynamic"
 
 import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
