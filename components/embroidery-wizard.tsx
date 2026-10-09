@@ -131,6 +131,10 @@ export function EmbroideryWizard({ onBack, onComplete }: EmbroideryWizardProps) 
   const [isCreatingOrder,  setIsCreatingOrder]  = useState(false)
   const [createError,      setCreateError]      = useState<string | null>(null)
   const [createdOrderId,   setCreatedOrderId]   = useState<string | null>(null)
+  // Signed URLs reales de las imágenes de diseño (Storage) — Ronda 9: se usan
+  // para incluir los links en el mensaje de WhatsApp, ya que wa.me no permite
+  // adjuntar imágenes, solo texto.
+  const [uploadedDesignUrls, setUploadedDesignUrls] = useState<string[]>([])
 
   // ── Derived display values ────────────────────────────────────────────────
   const selectedSize = SIZE_OPTIONS.find((s) => s.id === size)
@@ -203,6 +207,7 @@ export function EmbroideryWizard({ onBack, onComplete }: EmbroideryWizardProps) 
             })
           )
           designImageUrls = uploads.filter((u): u is string => u !== null)
+          setUploadedDesignUrls(designImageUrls)
         }
       } catch (err) {
         // Non-fatal — the order still gets created with the text
@@ -343,7 +348,15 @@ export function EmbroideryWizard({ onBack, onComplete }: EmbroideryWizardProps) 
       ? `Te adjunto el comprobante de transferencia para que puedas validar mi pago y agendar el pedido.`
       : `¡Quedo atenta/o a la confirmación!`
 
-    return `https://wa.me/56951896142?text=${encodeURIComponent(`${core} ${closing}`)}`
+    // wa.me solo manda texto — nunca adjunta una imagen de verdad. Se
+    // incluyen los links de las imágenes de diseño ya subidas a Storage
+    // (solo aplica a mode === "image") para que Bernardita no tenga que
+    // volver a pedirlas por chat.
+    const photosLine = uploadedDesignUrls.length > 0
+      ? `\n\nImagen de referencia:\n${uploadedDesignUrls.join("\n")}`
+      : ""
+
+    return `https://wa.me/56951896142?text=${encodeURIComponent(`${core} ${closing}${photosLine}`)}`
   }
 
   // ─────────────────────────────────────────────────────────────────────────

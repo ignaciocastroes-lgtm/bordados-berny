@@ -26,6 +26,8 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { LogoMark } from "@/components/logo-bordados-berny"
+import { Nfc } from "lucide-react"
+import Link from "next/link"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ interface MyOrder {
 const GARMENT_LABELS: Record<string, string> = {
   pantalon: "Pantalón", short: "Short", blusa: "Blusa",
   polera: "Polera", poleron: "Polerón", otro: "Otro", bordado: "Bordado / Matriz Digital",
+  llavero_nfc: "Llavero NFC",
 }
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -213,6 +216,18 @@ export function TrackerScreen() {
               </div>
 
               <p className="text-sm text-stone-600 line-clamp-2">{order.description}</p>
+
+              {/* Ronda 10 (Fase 2): el cliente llena su propio contenido —
+                  "hazlo tuyo" — antes de que Bernardita lo publique. */}
+              {order.garment_type === "llavero_nfc" && (
+                <Link
+                  href={`/mi-llavero/${order.id}`}
+                  className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
+                >
+                  <Nfc className="size-4 shrink-0" />
+                  Personalizar mi llavero NFC
+                </Link>
+              )}
 
               {/* Real download — Bernardita sube el .pes terminado desde el
                   Kanban (email-send-modal.tsx) y la URL firmada queda acá,

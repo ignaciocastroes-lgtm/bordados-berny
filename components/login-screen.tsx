@@ -14,10 +14,17 @@
  * a Server Component page.tsx (with `dynamic = "force-dynamic"`) that
  * imports a separate "use client" component — this file is that pattern
  * applied here too.
+ *
+ * FIX (admin access como URL, no escondido acá): esta pantalla tenía un
+ * botón "Acceso Taller" siempre visible Y un easter-egg de triple-click
+ * sobre el logo — ambos abrían el mismo form de login admin inline, y el
+ * botón visible hacía que el "secreto" no fuera secreto. A pedido de
+ * Ignacio, el login de admin ahora es su propia ruta: /acceso-taller
+ * (components/admin-login-screen.tsx). Esta pantalla queda solo con el
+ * login social de clientes.
  */
 
-import { useState, useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import {
   Card,
@@ -27,11 +34,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Button }    from "@/components/ui/button"
-import { Input }     from "@/components/ui/input"
-import { Label }     from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { cn }        from "@/lib/utils"
-import { Eye, EyeOff, LogIn, AlertCircle } from "lucide-react"
 import { LogoMark } from "@/components/logo-bordados-berny"
 
 function GoogleIcon({ className }: { className?: string }) {
@@ -61,168 +65,12 @@ function WhatsAppIcon({ className }: { className?: string }) {
   )
 }
 
-// ─── Admin login form (inline panel) ─────────────────────────────────────────
-
-function AdminLoginForm({ onCancel }: { onCancel: () => void }) {
-  const supabase = createClient()
-  const router   = useRouter()
-
-  const [email,       setEmail]       = useState("")
-  const [password,    setPassword]    = useState("")
-  const [showPw,      setShowPw]      = useState(false)
-  const [loading,     setLoading]     = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-    setLoading(true)
-
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email:    email.trim(),
-      password,
-    })
-
-    if (authError) {
-      setError(
-        authError.message === "Invalid login credentials"
-          ? "Email o contraseña incorrectos."
-          : authError.message
-      )
-      setLoading(false)
-      return
-    }
-
-    // Supabase has now set the auth cookie.
-    // The middleware will redirect based on profiles.role:
-    //   admin    → /admin/dashboard
-    //   customer → /wizard
-    // router.refresh() forces the middleware to re-evaluate.
-    router.refresh()
-    router.push("/admin/dashboard")
-  }
-
-  return (
-    <div className="animate-in fade-in slide-in-from-top-2 duration-200 space-y-4">
-
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-stone-700">Acceso Taller</p>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs text-stone-400 hover:text-stone-600 transition-colors"
-        >
-          Cancelar
-        </button>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-3">
-
-        <div className="space-y-1">
-          <Label htmlFor="admin-email" className="text-xs font-medium text-stone-600">
-            Email
-          </Label>
-          <Input
-            id="admin-email"
-            type="email"
-            placeholder="bernardita@bordadosberny.cl"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            required
-            autoFocus
-            disabled={loading}
-            className="border-stone-200 bg-white focus:border-emerald-500 focus:ring-emerald-500"
-          />
-        </div>
-
-        <div className="space-y-1">
-          <Label htmlFor="admin-password" className="text-xs font-medium text-stone-600">
-            Contraseña
-          </Label>
-          <div className="relative">
-            <Input
-              id="admin-password"
-              type={showPw ? "text" : "password"}
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              disabled={loading}
-              className="border-stone-200 bg-white pr-10 focus:border-emerald-500 focus:ring-emerald-500"
-            />
-            <button
-              type="button"
-              onClick={() => setShowPw(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
-              tabIndex={-1}
-            >
-              {showPw ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
-            </button>
-          </div>
-        </div>
-
-        {error && (
-          <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700">
-            <AlertCircle className="size-4 shrink-0" />
-            {error}
-          </div>
-        )}
-
-        <Button
-          type="submit"
-          disabled={loading || !email || !password}
-          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold h-11"
-        >
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <span className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Verificando...
-            </span>
-          ) : (
-            <span className="flex items-center gap-2">
-              <LogIn className="size-4" />
-              Ingresar al Taller
-            </span>
-          )}
-        </Button>
-      </form>
-    </div>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function LoginScreen() {
   const supabase = createClient()
-  const router   = useRouter()
 
-  const [isLoading,        setIsLoading]        = useState<string | null>(null)
-  const [secretClickCount, setSecretClickCount] = useState(0)
-  const [showSecretHint,   setShowSecretHint]   = useState(false)
-  const [showAdminForm,    setShowAdminForm]     = useState(false)
-
-  // Reset secret click count after 2 s of inactivity
-  useEffect(() => {
-    if (secretClickCount > 0 && secretClickCount < 3) {
-      const timer = setTimeout(() => {
-        setSecretClickCount(0)
-        setShowSecretHint(false)
-      }, 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [secretClickCount])
-
-  // ── Easter egg: 3× click on needle icon → open admin form ────────────────
-  const handleSecretClick = () => {
-    const next = secretClickCount + 1
-    setSecretClickCount(next)
-    if (next >= 2) setShowSecretHint(true)
-    if (next >= 3) {
-      setSecretClickCount(0)
-      setShowSecretHint(false)
-      setShowAdminForm(true)
-    }
-  }
+  const [isLoading, setIsLoading] = useState<string | null>(null)
 
   // ── Social OAuth ─────────────────────────────────────────────────────────
   const handleSocialLogin = async (provider: "google" | "facebook") => {
@@ -243,25 +91,9 @@ export function LoginScreen() {
 
         {/* Branding */}
         <div className="mb-8 flex flex-col items-center text-center">
-          <div className="relative mb-4">
-            <div
-              className={cn(
-                "flex size-20 items-center justify-center rounded-full transition-all duration-200 cursor-pointer",
-                secretClickCount > 0 && "ring-2 ring-emerald-400 ring-offset-2",
-                secretClickCount >= 2 && "ring-emerald-600 animate-pulse"
-              )}
-              onClick={handleSecretClick}
-            >
-              <LogoMark className="size-20 transition-transform hover:scale-105" />
-            </div>
-          </div>
+          <LogoMark className="mb-4 size-20" />
           <h1 className="text-2xl font-bold tracking-tight text-stone-800">Bordados Berny</h1>
           <p className="mt-1 text-sm text-stone-500">Sistema de Sastreria Inteligente</p>
-          {showSecretHint && (
-            <p className="mt-2 animate-pulse text-xs text-emerald-600">
-              Un click mas para acceso admin...
-            </p>
-          )}
         </div>
 
         {/* Card */}
@@ -272,73 +104,57 @@ export function LoginScreen() {
           <CardHeader className="pb-4 text-center">
             <CardTitle className="text-lg font-semibold text-stone-800">Bienvenido</CardTitle>
             <CardDescription className="text-stone-500">
-              {showAdminForm ? "Ingresa tus credenciales del taller" : "Inicia sesion para continuar"}
+              Inicia sesion para continuar
             </CardDescription>
           </CardHeader>
 
           <CardContent className="flex flex-col gap-4">
 
-            {showAdminForm ? (
-              /* ── Admin email/password form ── */
-              <AdminLoginForm onCancel={() => setShowAdminForm(false)} />
-            ) : (
-              /* ── Social login buttons ── */
-              <>
-                {/* Google */}
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className={cn(
-                    "relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium transition-all hover:border-emerald-400 hover:bg-emerald-50",
-                    isLoading === "google" && "pointer-events-none opacity-70"
-                  )}
-                  onClick={() => handleSocialLogin("google")}
-                >
-                  <GoogleIcon className="size-6" />
-                  <span className="flex-1 text-stone-700">Continuar con Google</span>
-                  {isLoading === "google" && (
-                    <div className="absolute right-4 size-5 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-600" />
-                  )}
-                </Button>
+            {/* Google */}
+            <Button
+              variant="outline"
+              size="lg"
+              className={cn(
+                "relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium transition-all hover:border-emerald-400 hover:bg-emerald-50",
+                isLoading === "google" && "pointer-events-none opacity-70"
+              )}
+              onClick={() => handleSocialLogin("google")}
+            >
+              <GoogleIcon className="size-6" />
+              <span className="flex-1 text-stone-700">Continuar con Google</span>
+              {isLoading === "google" && (
+                <div className="absolute right-4 size-5 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-600" />
+              )}
+            </Button>
 
-                {/* Facebook */}
-                <Button
-                  variant="outline"
-                  size="lg"
-                  className={cn(
-                    "relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium transition-all hover:border-emerald-400 hover:bg-emerald-50",
-                    isLoading === "facebook" && "pointer-events-none opacity-70"
-                  )}
-                  onClick={() => handleSocialLogin("facebook")}
-                >
-                  <FacebookIcon className="size-6" />
-                  <span className="flex-1 text-stone-700">Continuar con Facebook</span>
-                  {isLoading === "facebook" && (
-                    <div className="absolute right-4 size-5 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-600" />
-                  )}
-                </Button>
+            {/* Facebook */}
+            <Button
+              variant="outline"
+              size="lg"
+              className={cn(
+                "relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium transition-all hover:border-emerald-400 hover:bg-emerald-50",
+                isLoading === "facebook" && "pointer-events-none opacity-70"
+              )}
+              onClick={() => handleSocialLogin("facebook")}
+            >
+              <FacebookIcon className="size-6" />
+              <span className="flex-1 text-stone-700">Continuar con Facebook</span>
+              {isLoading === "facebook" && (
+                <div className="absolute right-4 size-5 animate-spin rounded-full border-2 border-stone-300 border-t-emerald-600" />
+              )}
+            </Button>
 
-                {/* WhatsApp — phone OTP placeholder */}
-                <Button
-                  variant="outline"
-                  size="lg"
-                  disabled
-                  className="relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium opacity-50"
-                >
-                  <WhatsAppIcon className="size-6" />
-                  <span className="flex-1 text-stone-700">Continuar con WhatsApp</span>
-                  <span className="text-xs text-stone-400">Próximamente</span>
-                </Button>
-
-                {/* Acceso Taller */}
-                <button
-                  onClick={() => setShowAdminForm(true)}
-                  className="mt-2 w-full text-center text-sm font-medium text-stone-500 transition-colors hover:text-emerald-600"
-                >
-                  Acceso Taller
-                </button>
-              </>
-            )}
+            {/* WhatsApp — phone OTP placeholder */}
+            <Button
+              variant="outline"
+              size="lg"
+              disabled
+              className="relative h-14 w-full justify-start gap-4 border-2 border-stone-200 bg-white text-left font-medium opacity-50"
+            >
+              <WhatsAppIcon className="size-6" />
+              <span className="flex-1 text-stone-700">Continuar con WhatsApp</span>
+              <span className="text-xs text-stone-400">Próximamente</span>
+            </Button>
 
             <Separator className="my-2 bg-stone-200" />
 

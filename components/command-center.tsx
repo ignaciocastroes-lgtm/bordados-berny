@@ -68,11 +68,12 @@ interface OrderRow {
 const GARMENT_LABELS: Record<string, string> = {
   pantalon: "Pantalón", short: "Short", blusa: "Blusa",
   polera: "Polera", poleron: "Polerón", otro: "Otro", bordado: "Bordado",
+  llavero_nfc: "Llavero NFC",
 }
 
 const GARMENT_EMOJI: Record<string, string> = {
   pantalon: "👖", short: "🩳", blusa: "👚",
-  polera: "👕", poleron: "🧥", otro: "✂️", bordado: "🧵",
+  polera: "👕", poleron: "🧥", otro: "✂️", bordado: "🧵", llavero_nfc: "🔑",
 }
 
 const ORDER_STATUS_COLORS: Record<OrderStatus, string> = {

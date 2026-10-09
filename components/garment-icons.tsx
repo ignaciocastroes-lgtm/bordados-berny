@@ -94,3 +94,19 @@ export function EmbroideryHoopIcon({ className }: IconProps) {
     </svg>
   )
 }
+
+/** Llavero NFC — anillo de llavero + tag con las ondas de un chip NFC.
+ *  Ronda 10: producto estrella de la web pública ("hazlo tuyo"), hasta
+ *  ahora solo cotizable por WhatsApp. */
+export function NfcKeychainIcon({ className }: IconProps) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="7" cy="5.2" r="2.6" strokeWidth="1.5" />
+      <path d="M8.6 7.3L13 12" strokeWidth="1.5" />
+      <rect x="11" y="10.3" width="9.5" height="10.2" rx="2" strokeWidth="1.5" />
+      <path d="M13.8 17.5h3.9" strokeWidth="1.1" strokeDasharray="1.3 1.4" opacity="0.6" />
+      <path d="M14.6 13.6a3.3 3.3 0 014.3 0M15.7 14.9a1.6 1.6 0 012.1 0" strokeWidth="1.2" opacity="0.85" />
+      <Knot cx={15.75} cy={16.1} />
+    </svg>
+  )
+}

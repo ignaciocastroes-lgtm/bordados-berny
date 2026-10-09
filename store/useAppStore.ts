@@ -2,26 +2,44 @@
 
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
+// Lógica de precios movida a lib/pricing.ts (server-safe, sin "use client")
+// para que app/api/orders/route.ts pueda recalcular el precio ahí sin
+// arriesgar evaluar `sessionStorage` en Node. Se re-exporta todo acá para no
+// romper los imports existentes (ej. components/admin-settings.tsx).
+import {
+  MATRIX_BASE_PRICES,
+  TEXT_DISCOUNT,
+  calculateMatrixPrice,
+  hasTextDiscount as calcHasTextDiscount,
+  type EmbroideryMode,
+  type EmbroiderySize,
+} from "@/lib/pricing"
+import type { NfcUseCase } from "@/lib/nfc"
+
+export { MATRIX_BASE_PRICES, TEXT_DISCOUNT, calculateMatrixPrice }
+export type { EmbroideryMode, EmbroiderySize }
 
 // ─── Role ─────────────────────────────────────────────────────────────────────
 export type UserRole = "unauthenticated" | "customer" | "admin"
 
 // ─── Order Payload ────────────────────────────────────────────────────────────
-export type GarmentType = "pantalon" | "short" | "blusa" | "polera" | "poleron" | "otro" | "bordado"
-export type EmbroideryMode = "image" | "text"
-export type EmbroiderySize = "10x10" | "13x18" | "18x26"
+// Ronda 10: "llavero_nfc" — producto estrella de la web pública, hasta ahora
+// solo cotizable por WhatsApp. Ver lib/nfc.ts para los casos de uso y la
+// tabla nfc_profiles (Fase 2 — página pública que abre el chip).
+export type GarmentType =
+  | "pantalon"
+  | "short"
+  | "blusa"
+  | "polera"
+  | "poleron"
+  | "otro"
+  | "bordado"
+  | "llavero_nfc"
 
-const MATRIX_BASE_PRICES: Record<EmbroiderySize, number> = {
-  "10x10": 3000,
-  "13x18": 7000,
-  "18x26": 10000,
-}
-const TEXT_DISCOUNT = 0.20
-
-export function calculateMatrixPrice(size: EmbroiderySize | null, mode: EmbroideryMode | null): number {
-  if (!size || !mode) return 0
-  const base = MATRIX_BASE_PRICES[size]
-  return mode === "text" ? Math.round(base * (1 - TEXT_DISCOUNT)) : base
+export interface NfcOrderData {
+  useCase: NfcUseCase | null
+  content: string
+  quantity: number
 }
 
 export interface OrderPayload {
@@ -34,13 +52,17 @@ export interface OrderPayload {
     calculatedPrice: number
     hasTextDiscount: boolean
   }
+  nfc: NfcOrderData
 }
+
+const DEFAULT_NFC: NfcOrderData = { useCase: null, content: "", quantity: 1 }
 
 const DEFAULT_ORDER: OrderPayload = {
   garmentType: null,
   photos: { front: null, back: null, detail: null },
   description: "",
   embroidery: { mode: null, size: null, calculatedPrice: 0, hasTextDiscount: false },
+  nfc: DEFAULT_NFC,
 }
 
 // ─── Store shape ──────────────────────────────────────────────────────────────
@@ -54,6 +76,9 @@ interface AppState {
   setDescription: (text: string) => void
   setEmbroideryMode: (mode: EmbroideryMode) => void
   setEmbroiderySize: (size: EmbroiderySize) => void
+  setNfcUseCase: (useCase: NfcUseCase) => void
+  setNfcContent: (content: string) => void
+  setNfcQuantity: (quantity: number) => void
   resetOrder: () => void
 }
 
@@ -72,6 +97,7 @@ export const useAppStore = create<AppState>()(
             ...state.order,
             garmentType: garment,
             embroidery: garment === "bordado" ? state.order.embroidery : DEFAULT_ORDER.embroidery,
+            nfc: garment === "llavero_nfc" ? state.order.nfc : DEFAULT_NFC,
           },
         })),
 
@@ -85,7 +111,7 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const size = state.order.embroidery.size
           const calculatedPrice = calculateMatrixPrice(size, mode)
-          const hasTextDiscount = mode === "text" && size !== null && size !== "10x10"
+          const hasTextDiscount = calcHasTextDiscount(size, mode)
           return { order: { ...state.order, embroidery: { ...state.order.embroidery, mode, calculatedPrice, hasTextDiscount } } }
         }),
 
@@ -93,9 +119,18 @@ export const useAppStore = create<AppState>()(
         set((state) => {
           const mode = state.order.embroidery.mode
           const calculatedPrice = calculateMatrixPrice(size, mode)
-          const hasTextDiscount = mode === "text" && size !== "10x10"
+          const hasTextDiscount = calcHasTextDiscount(size, mode)
           return { order: { ...state.order, embroidery: { ...state.order.embroidery, size, calculatedPrice, hasTextDiscount } } }
         }),
+
+      setNfcUseCase: (useCase) =>
+        set((state) => ({ order: { ...state.order, nfc: { ...state.order.nfc, useCase } } })),
+
+      setNfcContent: (content) =>
+        set((state) => ({ order: { ...state.order, nfc: { ...state.order.nfc, content } } })),
+
+      setNfcQuantity: (quantity) =>
+        set((state) => ({ order: { ...state.order, nfc: { ...state.order.nfc, quantity: Math.max(1, quantity) } } })),
 
       resetOrder: () => set({ order: DEFAULT_ORDER }),
     }),

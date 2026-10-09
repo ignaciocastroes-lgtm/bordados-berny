@@ -54,4 +54,5 @@ export const GARMENT_ICONS: Record<string, string> = {
   poleron: "🧥",
   otro: "✂️",
   bordado: "🧵",
+  llavero_nfc: "🔑",
 }

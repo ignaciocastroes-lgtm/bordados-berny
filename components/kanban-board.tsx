@@ -60,6 +60,7 @@ const COLUMNS: KanbanColumnType[] = [
 const GARMENT_LABELS: Record<string, string> = {
   pantalon: "Pantalón", short: "Short", blusa: "Blusa",
   polera: "Polera", poleron: "Polerón", otro: "Otro", bordado: "Bordado",
+  llavero_nfc: "Llavero NFC",
 }
 
 // Raw shape returned by the Supabase query below.

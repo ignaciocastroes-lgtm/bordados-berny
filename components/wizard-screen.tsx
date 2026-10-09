@@ -28,8 +28,10 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAppStore, type GarmentType } from "@/store/useAppStore"
-// EmbroideryWizard remains its own component; it writes to the store internally
+// EmbroideryWizard y NfcKeychainWizard quedan como componentes propios; cada
+// uno escribe al store internamente.
 import { EmbroideryWizard } from "@/components/embroidery-wizard"
+import { NfcKeychainWizard } from "@/components/nfc-keychain-wizard"
 import { LogoMark } from "@/components/logo-bordados-berny"
 import {
   PantsIcon,
@@ -39,6 +41,7 @@ import {
   HoodieIcon,
   OtherIcon,
   EmbroideryHoopIcon,
+  NfcKeychainIcon,
 } from "@/components/garment-icons"
 
 // ─── Garment options (artistic "bordado"-styled icons — see garment-icons.tsx) ─
@@ -57,6 +60,7 @@ const GARMENT_OPTIONS: GarmentOption[] = [
   { id: "poleron",  label: "Polerón",        icon: <HoodieIcon className="w-9 h-9" /> },
   { id: "otro",     label: "Otro",           icon: <OtherIcon className="w-9 h-9" /> },
   { id: "bordado",  label: "Bordado/Matriz", icon: <EmbroideryHoopIcon className="w-9 h-9" /> },
+  { id: "llavero_nfc", label: "Llavero NFC", icon: <NfcKeychainIcon className="w-9 h-9" /> },
 ]
 
 // ─── Photo Dropzone (UI only, no store contact) ───────────────────────────────
@@ -171,11 +175,34 @@ export function WizardScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [confirmedOrderId, setConfirmedOrderId] = useState<string | null>(null)
 
+  // FIX (root cause — fotos nunca llegaban a Bernardita): `setPhoto(slot, url)`
+  // guardaba un `URL.createObjectURL(file)` — un blob: URL que solo existe en
+  // la memoria de ESTA pestaña del navegador. Se mandaba igual a POST
+  // /api/orders y quedaba en photo_front_url/back/detail, pero era inútil
+  // para cualquiera que no fuera este mismo tab (el admin en /admin/tickets,
+  // el propio cliente en otra sesión, etc. — imagen rota siempre). El File
+  // real se guarda acá, en paralelo al blob preview que ya usa <PhotoDropzone>,
+  // y se sube de verdad a `design-uploads` (mismo patrón que
+  // embroidery-wizard.tsx handleProceedToPayment) justo antes de enviar el
+  // pedido en handleSubmitOrder.
+  const [photoFiles, setPhotoFiles] = useState<{
+    front: File | null; back: File | null; detail: File | null
+  }>({ front: null, back: null, detail: null })
+
+  // Signed URLs reales (Storage), llenadas al final de handleSubmitOrder —
+  // Ronda 9: se usan para incluir los links de las fotos en el mensaje de
+  // WhatsApp, ya que wa.me no permite adjuntar imágenes, solo texto.
+  const [uploadedPhotoUrls, setUploadedPhotoUrls] = useState<{
+    front: string | null; back: string | null; detail: string | null
+  }>({ front: null, back: null, detail: null })
+
   // ── Derived ──────────────────────────────────────────────────────────────────
   const { garmentType, photos, description } = order
   const isBordado = garmentType === "bordado"
+  const isLlaveroNfc = garmentType === "llavero_nfc"
 
-  // ── Photo handler: convert File → object URL, store it ──────────────────────
+  // ── Photo handler: guarda el File real + un blob URL solo para la vista
+  // previa inmediata en <PhotoDropzone> (nunca se manda al servidor). ─────────
   // FIX (React error #310 — "Rendered more hooks than during the previous
   // render"): this useCallback used to sit AFTER the `if (checkingAuth) return`
   // below. On the first render (checkingAuth=true) React never reached this
@@ -185,8 +212,17 @@ export function WizardScreen() {
   // conditional return in the component.
   const handlePhotoUpload = useCallback(
     (slot: "front" | "back" | "detail") => (file: File) => {
-      const url = URL.createObjectURL(file)
-      setPhoto(slot, url)
+      const previewUrl = URL.createObjectURL(file)
+      setPhoto(slot, previewUrl)
+      setPhotoFiles((prev) => ({ ...prev, [slot]: file }))
+    },
+    [setPhoto]
+  )
+
+  const handlePhotoRemove = useCallback(
+    (slot: "front" | "back" | "detail") => () => {
+      setPhoto(slot, null)
+      setPhotoFiles((prev) => ({ ...prev, [slot]: null }))
     },
     [setPhoto]
   )
@@ -210,7 +246,45 @@ export function WizardScreen() {
     setSubmitError(null)
     setIsSubmitting(true)
 
-    const payload = { garmentType, photos, description, embroidery: null }
+    // ── Subir las fotos reales a `design-uploads` ANTES de crear el pedido ──
+    // Mismo patrón que embroidery-wizard.tsx handleProceedToPayment: nunca se
+    // manda el blob: URL de la vista previa, se sube el File real y se manda
+    // la signed URL resultante. No-fatal por foto — si una falla, se loguea y
+    // esa foto queda null, pero el pedido se crea igual (consistente con cómo
+    // ya se maneja la subida de imágenes de diseño).
+    const uploadedPhotos = { front: null as string | null, back: null as string | null, detail: null as string | null }
+    const slotsToUpload = (Object.entries(photoFiles) as [keyof typeof photoFiles, File | null][])
+      .filter(([, file]) => file !== null)
+
+    if (slotsToUpload.length > 0) {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await Promise.all(
+          slotsToUpload.map(async ([slot, file]) => {
+            if (!file) return
+            const ext = file.name.split(".").pop() || "jpg"
+            const path = `${user.id}/prenda/${Date.now()}-${slot}.${ext}`
+            const { error: upErr } = await supabase.storage
+              .from("design-uploads")
+              .upload(path, file, { contentType: file.type })
+            if (upErr) {
+              console.error(`[WizardPage] Error subiendo foto "${slot}":`, upErr)
+              return
+            }
+            const { data: signed } = await supabase.storage
+              .from("design-uploads")
+              .createSignedUrl(path, 60 * 60 * 24 * 365)
+            uploadedPhotos[slot] = signed?.signedUrl ?? null
+          })
+        )
+      } else {
+        console.error("[WizardPage] No hay sesión — no se pudieron subir las fotos")
+      }
+    }
+
+    setUploadedPhotoUrls(uploadedPhotos)
+
+    const payload = { garmentType, photos: uploadedPhotos, description, embroidery: null }
     console.log("[WizardPage] Enviando pedido →", payload)
 
     try {
@@ -246,19 +320,37 @@ export function WizardScreen() {
     setStep("garment")
   }
 
+  // Ronda 9: wa.me solo manda texto — nunca puede adjuntar una imagen de
+  // verdad. Mientras no haya envío de email con adjuntos reales (ver
+  // lib/email.ts), al menos se incluyen los links de las fotos ya subidas
+  // a Storage para que Bernardita no tenga que volver a pedirlas por chat.
   const buildWhatsAppUrl = () => {
     const label = GARMENT_OPTIONS.find(o => o.id === garmentType)?.label ?? garmentType
     const ref   = confirmedOrderId ? `#${confirmedOrderId.slice(0, 8).toUpperCase()}` : "(pendiente)"
-    const msg   = `¡Hola Bernardita! Acabo de ingresar un nuevo ticket en la App. Mi número de pedido es ${ref} para un/a ${label}. ¡Quedo atenta/o a la confirmación!`
+    const photoLinks = [uploadedPhotoUrls.front, uploadedPhotoUrls.back, uploadedPhotoUrls.detail]
+      .filter((url): url is string => !!url)
+    const photosLine = photoLinks.length > 0
+      ? `\n\nFotos:\n${photoLinks.join("\n")}`
+      : ""
+    const msg = `¡Hola Bernardita! Acabo de ingresar un nuevo ticket en la App. Mi número de pedido es ${ref} para un/a ${label}. ¡Quedo atenta/o a la confirmación!${photosLine}`
     return `https://wa.me/56951896142?text=${encodeURIComponent(msg)}`
   }
 
-  // ── If bordado, hand off entirely to EmbroideryWizard ───────────────────────
-  // EmbroideryWizard should be refactored to call useAppStore internally;
-  // pass onBack/onComplete for navigation control.
+  // ── If bordado or llavero NFC, hand off entirely to their own wizard ───────
+  // Both components call useAppStore internally; pass onBack/onComplete for
+  // navigation control, same contract.
   if (isBordado && step !== "garment") {
     return (
       <EmbroideryWizard
+        onBack={() => setStep("garment")}
+        onComplete={handleGoToTracker}
+      />
+    )
+  }
+
+  if (isLlaveroNfc && step !== "garment") {
+    return (
+      <NfcKeychainWizard
         onBack={() => setStep("garment")}
         onComplete={handleGoToTracker}
       />
@@ -360,19 +452,19 @@ export function WizardScreen() {
                 label="Vista Frontal"
                 photo={photos.front}
                 onUpload={handlePhotoUpload("front")}
-                onRemove={() => setPhoto("front", null)}
+                onRemove={handlePhotoRemove("front")}
               />
               <PhotoDropzone
                 label="Vista Trasera"
                 photo={photos.back}
                 onUpload={handlePhotoUpload("back")}
-                onRemove={() => setPhoto("back", null)}
+                onRemove={handlePhotoRemove("back")}
               />
               <PhotoDropzone
                 label="Detalle / Medida"
                 photo={photos.detail}
                 onUpload={handlePhotoUpload("detail")}
-                onRemove={() => setPhoto("detail", null)}
+                onRemove={handlePhotoRemove("detail")}
               />
             </div>
 
